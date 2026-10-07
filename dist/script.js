@@ -18,7 +18,7 @@ document.querySelector('#load-mix').addEventListener('click', function () {
   this.style.display = 'none';
   document.querySelector('#embed-note').textContent = 'Press play in the player. If it is unavailable, open the mix on SoundCloud below.';
 });
-document.querySelector('audio').addEventListener('error', () => {
+document.querySelector('.preview audio').addEventListener('error', () => {
   document.querySelector('#audio-note').textContent = 'Preview unavailable. Choose your platform below to listen.';
 });
 
@@ -63,3 +63,43 @@ if (window.matchMedia('(hover: hover) and (pointer: fine)').matches) {
   });
   artwork.addEventListener('pointerleave', () => { artwork.style.transform = ''; });
 }
+
+// One preview at a time; playback starts only after an explicit tap.
+const recordAudio = document.querySelector('#record-audio');
+const recordButtons = [document.querySelector('#record-toggle'), document.querySelector('#record-play')];
+const recordStatus = document.querySelector('#record-status');
+const recordSeek = document.querySelector('#record-seek');
+const formatTime = seconds => `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, '0')}`;
+function syncRecord() {
+  const playing = !recordAudio.paused && !recordAudio.ended;
+  document.querySelector('.record-stage').classList.toggle('is-playing', playing);
+  recordButtons.forEach(button => button.setAttribute('aria-pressed', String(playing)));
+  recordButtons[0].setAttribute('aria-label', playing ? 'Pause latest release preview' : 'Play latest release preview');
+  recordButtons[1].textContent = playing ? 'Pause preview' : 'Play preview';
+  document.querySelector('#record-label-status').textContent = playing ? 'NOW PLAYING' : 'TAP TO PLAY';
+}
+async function toggleRecord() {
+  if (!recordAudio.paused) { recordAudio.pause(); return; }
+  recordStatus.textContent = 'Loading preview…';
+  if (recordAudio.ended) recordAudio.currentTime = 0;
+  try { await recordAudio.play(); }
+  catch { recordStatus.textContent = 'Unable to play here. Open the full track on Beatport below.'; syncRecord(); }
+}
+recordButtons.forEach(button => button.addEventListener('click', toggleRecord));
+recordAudio.addEventListener('playing', () => { recordStatus.textContent = 'Playing the official Beatport preview.'; syncRecord(); });
+recordAudio.addEventListener('pause', () => { recordStatus.textContent = 'Preview paused.'; syncRecord(); });
+recordAudio.addEventListener('ended', () => { recordStatus.textContent = 'Preview finished. Listen to the full track on Beatport.'; syncRecord(); });
+recordAudio.addEventListener('error', () => { recordStatus.textContent = 'Preview unavailable. Listen on Beatport below.'; syncRecord(); });
+recordAudio.addEventListener('loadedmetadata', () => { recordSeek.disabled = !Number.isFinite(recordAudio.duration); });
+recordAudio.addEventListener('timeupdate', () => {
+  if (Number.isFinite(recordAudio.duration) && recordAudio.duration > 0) {
+    recordSeek.value = recordAudio.currentTime / recordAudio.duration * 100;
+    document.querySelector('#record-time').textContent = `${formatTime(recordAudio.currentTime)} / ${formatTime(recordAudio.duration)}`;
+  }
+});
+recordSeek.addEventListener('input', () => { if (Number.isFinite(recordAudio.duration)) recordAudio.currentTime = Number(recordSeek.value) / 100 * recordAudio.duration; });
+document.querySelectorAll('audio').forEach(audio => audio.addEventListener('play', () => {
+  document.querySelectorAll('audio').forEach(other => { if (other !== audio) other.pause(); });
+}));
+document.querySelector('#load-mix').addEventListener('click', () => { document.querySelectorAll('audio').forEach(audio => audio.pause()); });
+syncRecord();
